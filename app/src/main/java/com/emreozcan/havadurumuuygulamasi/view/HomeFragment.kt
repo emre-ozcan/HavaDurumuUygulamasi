@@ -1,6 +1,7 @@
 package com.emreozcan.havadurumuuygulamasi.view
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
@@ -14,6 +15,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.content.res.ResourcesCompat
 import androidx.navigation.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -22,6 +24,7 @@ import com.emreozcan.havadurumuuygulamasi.R
 import com.emreozcan.havadurumuuygulamasi.adapter.HomeRecyclerAdapter
 import com.emreozcan.havadurumuuygulamasi.model.Locations
 import com.emreozcan.havadurumuuygulamasi.service.WeatherAPI
+import com.google.android.gms.location.FusedLocationProviderClient
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
@@ -36,15 +39,11 @@ import www.sanju.motiontoast.MotionToast
  * Home Fragment
  * Bulunulan konuma yakın olan lokasyonlar burada listelenmektedir
  */
-class HomeFragment : Fragment() , LocationListener{
+class HomeFragment : Fragment(){
     private lateinit var homeRecyclerAdapter: HomeRecyclerAdapter
 
-    var latitude =""
-    var longitude =""
-
-    val konumSaglayici  = "gps"
-
-    private lateinit var locationManager: LocationManager
+    var latitude ="none"
+    var longitude ="none"
 
     private val BASE_URL = "https://www.metaweather.com/api/" //API Base
 
@@ -54,66 +53,55 @@ class HomeFragment : Fragment() , LocationListener{
 
     private var compositeDisposable : CompositeDisposable?= null
 
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        val view = inflater.inflate(R.layout.fragment_home, container, false)
 
-        locationManager = context?.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
+    @SuppressLint("MissingPermission")
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val sharedPref = activity?.getSharedPreferences("latlong", Context.MODE_PRIVATE)
+        latitude = sharedPref?.getString("latitude","none").toString()
+        longitude = sharedPref?.getString("longitude","none").toString()
         val layoutManager : RecyclerView.LayoutManager = LinearLayoutManager(context)
         view.rvHome.layoutManager = layoutManager
 
         compositeDisposable = CompositeDisposable()
+        hideFab(view)
 
         loadingDialog = LoadingDialog(requireContext())
         loadingDialog.startDialog()
 
-        getLocation()
-        hideFab(view)
+        if (longitude!="none"&&latitude!="none"){
+            loadLocations()
+        }else{
+
+            val action = HomeFragmentDirections.actionHomeFragmentToStartFragment()
+            view.findNavController().navigate(action)
+            loadingDialog.dismissDialog()
+        }
 
         view.fab.setOnClickListener(View.OnClickListener {
             val action =
-                HomeFragmentDirections.actionHomeFragmentToCitiesFragment(latitude, longitude)
-                view.findNavController().navigate(action)
+                    HomeFragmentDirections.actionHomeFragmentToCitiesFragment(latitude, longitude)
+            view.findNavController().navigate(action)
         })
 
+
+    }
+    override fun onCreateView(
+            inflater: LayoutInflater, container: ViewGroup?,
+            savedInstanceState: Bundle?
+    ): View? {
+        val view = inflater.inflate(R.layout.fragment_home, container, false)
         return view
     }
 
-    private fun getLocation(){
-        if (context?.let { ContextCompat.checkSelfPermission(it, Manifest.permission.ACCESS_FINE_LOCATION) } != PackageManager.PERMISSION_GRANTED) {
-            if (activity?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, Manifest.permission.ACCESS_FINE_LOCATION) } == true) {
-                ActivityCompat.requestPermissions(requireActivity(), arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
-            } else {
-                ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 1)
-            }
-        }else{
-
-            var konum = locationManager.getLastKnownLocation(konumSaglayici)
-            if (konum!=null){
-                onLocationChanged(konum)
-                loadLocations()
-            }else{
-                MotionToast.createColorToast(requireActivity(),
-                        "Hata ! Konumunuz Kapalı Olabİlİr",
-                        "Lütfen Konumunuzu Kontrol Ediniz!",
-                        MotionToast.TOAST_ERROR,
-                        MotionToast.GRAVITY_BOTTOM,
-                        MotionToast.LONG_DURATION,
-                        ResourcesCompat.getFont(requireActivity(),R.font.helvetica_regular))
-            }
-        }
-
-    }
     private fun loadLocations(){
         val myUrl : String = "location/search/?lattlong=${latitude},${longitude}"
 
         val retrofit = Retrofit.Builder().baseUrl(BASE_URL)
-            .addConverterFactory(GsonConverterFactory.create())
-            .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
-            .build().create(WeatherAPI::class.java)
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
+                .build().create(WeatherAPI::class.java)
 
         compositeDisposable?.add(retrofit.getLocations(myUrl)
                 .subscribeOn(Schedulers.io())
@@ -129,11 +117,14 @@ class HomeFragment : Fragment() , LocationListener{
             loadingDialog.dismissDialog()
         }
     }
+
     private fun hideFab(view: View){
+
         /**
          * Bu metot Fabın Recycler Scroll edildiğinde kaybolarak daha iyi bir deneyim elde
          * edilmesi için oluşturulmuştur
          */
+
         view.rvHome.addOnScrollListener(object : RecyclerView.OnScrollListener(){
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                 if (dy<0&&!view.fab.isShown){
@@ -145,14 +136,10 @@ class HomeFragment : Fragment() , LocationListener{
             }
         })
     }
-    override fun onLocationChanged(location: Location) {
-        latitude = location.latitude.toString()
-        longitude = location.longitude.toString()
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         compositeDisposable?.clear()
     }
+
 
 }

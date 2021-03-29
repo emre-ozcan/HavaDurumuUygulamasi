@@ -24,6 +24,12 @@
         <action
             android:id="@+id/action_homeFragment_to_citiesFragment"
             app:destination="@id/citiesFragment" />
+        <argument
+            android:name="check"
+            app:argType="integer" />
+        <action
+            android:id="@+id/action_homeFragment_to_startFragment"
+            app:destination="@id/startFragment" />
     </fragment>
     <fragment
         android:id="@+id/citiesFragment"

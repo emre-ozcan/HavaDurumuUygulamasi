@@ -61,5 +61,7 @@ dependencies {
     implementation "com.airbnb.android:lottie:$lottieVersion"
 
     implementation 'com.github.Spikeysanju:MotionToast:1.3.3.4'
+
+    implementation 'com.google.android.gms:play-services-location:18.0.0'
 }
 apply plugin: "androidx.navigation.safeargs.kotlin"
